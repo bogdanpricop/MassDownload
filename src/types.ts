@@ -1,4 +1,4 @@
-export type ItemStatus = 'queued' | 'downloading' | 'done' | 'failed' | 'cancelled';
+export type ItemStatus = 'queued' | 'downloading' | 'done' | 'failed' | 'cancelled' | 'skipped';
 
 /** A discovered downloadable link, optionally with a human-readable title. */
 export interface LinkInfo {
@@ -21,7 +21,7 @@ export interface DownloadItem {
   totalBytes?: number;
 }
 
-export type SearchSource = 'google' | 'sitemap' | 'bing';
+export type SearchSource = 'google' | 'sitemap' | 'bing' | 'crawl';
 
 export interface SearchQuery {
   /** Domain like `bej-cojocaru.ro` (without protocol). Optional but usually set. */
@@ -40,6 +40,18 @@ export interface SavedSearch {
   query: SearchQuery;
   source: SearchSource;
   createdAt: number;
+  /** Recurring re-scan schedule. When set, the extension wakes up every
+   *  intervalDays and re-runs this search, auto-downloading any new files
+   *  (already-in-library items are filtered out by the manifest dedup). */
+  schedule?: {
+    intervalDays: number;
+    /** Unix ms of last successful run. */
+    lastRunAt?: number;
+    /** Unix ms when the next run is due. */
+    nextRunAt?: number;
+    /** When true, show a desktop notification on new files. */
+    notify: boolean;
+  };
 }
 
 export interface Settings {
@@ -48,6 +60,10 @@ export interface Settings {
   maxPages: number;
   subfolderPattern: string;
   savedSearches: SavedSearch[];
+  /** When true, a HEAD request is made before each download. URLs that return 404/410
+   *  are skipped without consuming a download slot. Useful for sitemap mode where
+   *  many URLs may be stale. Default false (extra request per file). */
+  preflightCheck: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -56,6 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxPages: 20,
   subfolderPattern: 'MassDownload/{host}',
   savedSearches: [],
+  preflightCheck: false,
 };
 
 export type ScanErrorReason = 'CAPTCHA' | 'NETWORK' | 'PARSE' | 'NO_TAB' | 'UNKNOWN';

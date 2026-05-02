@@ -118,6 +118,7 @@ Reload the extension once after the first dev run; the side panel hot-reloads on
 | **Google** (default) | You want what Google indexes; site has no public sitemap | Builds `site:X filetype:Y` query, paginates with `start=0,10,20…` via a real background tab (loading→complete cycles, random 0.8–2s delays — looks like a human, not a bot). **Auto-falls back to Bing on CAPTCHA.** |
 | **Bing** | Google rate-limited; alternative result set | Uses `bing.com/search?q=site:X filetype:Y`, paginates `first=1,51,101…&count=50`. Bing rarely CAPTCHAs. |
 | **Sitemap.xml** | Site has a sitemap; you want **everything**, not just indexed pages | Reads `robots.txt` for `Sitemap:` directives, falls back to `/sitemap.xml`, `/sitemap_index.xml`. Recursively follows sitemap-index trees (max depth 3, max 50 sitemap files). Supports gzipped `.xml.gz`. |
+| **Crawl** | No sitemap, Google indexing is patchy, but the site has internal links | BFS from the homepage following intra-domain `<a href>` links up to depth 2 and 100 pages, harvesting any URLs that match your filetype filter. |
 
 The side panel also has a **Scan tab** button: parses the active tab as Google SERP if the URL matches, otherwise extracts every `a[href]` from the page (generic mode).
 
@@ -145,6 +146,22 @@ The HTML is **fully self-contained** — open it from a USB stick, email it to a
 ### Scan-time dedup
 
 Results that are already in the library appear with an **"in library"** badge and are unchecked by default. You can still opt to re-download (e.g. to refresh content).
+
+### Resumable downloads
+
+The download queue is persisted to `chrome.storage.local` after every few settled items. If the service worker is evicted mid-batch (Chrome does this aggressively under memory pressure), opening the side panel surfaces a *"Resume previous queue?"* bar showing pending count and start age. Click **Resume** and only the un-finished items are processed.
+
+### Pre-flight HEAD check
+
+Optional setting (default off). Before each download, sends a HEAD request with a 3-second timeout. URLs that return 404/410 are marked `skipped` and don't consume a download slot. Most useful for sitemap mode where stale URLs are common; adds ~200ms per file otherwise.
+
+### Recurring scheduled re-scans
+
+Click the **⌚** icon next to a saved search to set an interval in days. The extension wakes up via `chrome.alarms`, re-runs the scan headlessly (no UI required), downloads only files that aren't already in the library, and optionally fires a desktop notification on new files. The alarm is owned by the browser, so it survives service-worker eviction.
+
+### JSON / CSV export
+
+The library HTML has **↓ JSON** and **↓ CSV** buttons that download whatever is currently filtered/sorted on screen. CSV uses RFC 4180 quoting + UTF-8 BOM (Excel-friendly); JSON is pretty-printed.
 
 ### Saving without per-file prompts
 
@@ -259,9 +276,11 @@ All persist via `chrome.storage.local`.
 | `sidePanel` | Side panel UI |
 | `downloads` | Save files, regenerate library.html |
 | `activeTab` + `scripting` | Read links from the current tab; in-page Google SERP extraction |
-| `storage` | Persist settings, saved searches, library manifest |
-| `offscreen` | Run `DOMParser` on Bing HTML / sitemap XML |
+| `storage` | Persist settings, saved searches, library manifest, resumable queue |
+| `offscreen` | Run `DOMParser` on Bing HTML / sitemap XML / crawled pages |
 | `tabs` | Read active tab URL, manage scan tab |
+| `alarms` | Wake up periodically to re-run scheduled saved searches |
+| `notifications` | Show a desktop alert when a scheduled run downloads new files |
 | `<all_urls>` host | Fetch Google in any locale, Bing, any site's robots.txt and sitemap |
 
 **No telemetry. No remote config. No data leaves your browser** except the HTTP requests required to fetch search pages and download the files you select.

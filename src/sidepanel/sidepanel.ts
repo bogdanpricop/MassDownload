@@ -40,9 +40,14 @@ const settingsBody = $<HTMLDivElement>('settings-body');
 const parallelInput = $<HTMLInputElement>('parallel-input');
 const maxPagesInput = $<HTMLInputElement>('maxpages-input');
 const subfolderInput = $<HTMLInputElement>('subfolder-input');
+const preflightInput = $<HTMLInputElement>('preflight-input');
 const pickFolderBtn = $<HTMLButtonElement>('pick-folder-btn');
 const openDlSettingsBtn = $<HTMLButtonElement>('open-dl-settings-btn');
 const libraryBtn = $<HTMLButtonElement>('library-btn');
+const resumeBar = $<HTMLElement>('resume-bar');
+const resumeDetail = $<HTMLElement>('resume-detail');
+const resumeBtn = $<HTMLButtonElement>('resume-btn');
+const discardBtn = $<HTMLButtonElement>('discard-btn');
 
 // Status
 const scanProgressSection = $<HTMLElement>('scan-progress');
@@ -144,11 +149,12 @@ function writeQuery(q: SearchQuery) {
   qsExclude.value = q.exclude ?? '';
 }
 
-function readSettingsFromUI(): Pick<Settings, 'maxParallel' | 'maxPages' | 'subfolderPattern'> {
+function readSettingsFromUI(): Pick<Settings, 'maxParallel' | 'maxPages' | 'subfolderPattern' | 'preflightCheck'> {
   return {
     maxParallel: Math.max(1, Math.min(20, parseInt(parallelInput.value, 10) || 5)),
     maxPages: Math.max(1, Math.min(50, parseInt(maxPagesInput.value, 10) || 20)),
     subfolderPattern: subfolderInput.value.trim(),
+    preflightCheck: preflightInput.checked,
   };
 }
 
@@ -201,15 +207,27 @@ function handleMessage(msg: BackgroundMsg): void {
     case 'DOWNLOAD_PROGRESS':
       updateDownloadItem(msg.item);
       break;
-    case 'DOWNLOAD_DONE':
-      dlStatus.textContent = `Done. ${msg.ok} ok, ${msg.failed} failed, ${msg.cancelled} cancelled.`;
+    case 'DOWNLOAD_DONE': {
+      const parts = [`${msg.ok} ok`];
+      if (msg.skipped) parts.push(`${msg.skipped} skipped`);
+      if (msg.failed) parts.push(`${msg.failed} failed`);
+      if (msg.cancelled) parts.push(`${msg.cancelled} cancelled`);
+      dlStatus.textContent = `Done. ${parts.join(', ')}.`;
       setBusy(null);
       break;
+    }
     case 'STOPPED':
       scanStatus.textContent = 'Stopped.';
       dlStatus.textContent = 'Stopped.';
       setBusy(null);
       break;
+    case 'QUEUE_RESUMABLE': {
+      const ageMin = Math.round((Date.now() - msg.startedAt) / 60000);
+      const ageStr = ageMin < 60 ? `${ageMin} min ago` : `${Math.round(ageMin / 60)} h ago`;
+      resumeDetail.textContent = `${msg.pendingCount} of ${msg.totalCount} files left, started ${ageStr}.`;
+      resumeBar.hidden = false;
+      break;
+    }
     case 'PONG':
       break;
   }
@@ -268,11 +286,12 @@ function updateDownloadItem(item: DownloadItem) {
     item.status === 'downloading' ? '⬇' :
     item.status === 'done' ? '✓' :
     item.status === 'failed' ? '✗' :
+    item.status === 'skipped' ? '⊘' :
     '⊗';
   fnSpan.textContent = item.filename;
   fnSpan.title = item.error ? `${item.url}\n${item.error}` : item.url;
 
-  if (item.status === 'done' || item.status === 'failed' || item.status === 'cancelled') {
+  if (item.status === 'done' || item.status === 'failed' || item.status === 'cancelled' || item.status === 'skipped') {
     state.completedCount++;
     dlBar.value = state.completedCount;
     dlStatus.textContent = `${state.completedCount} / ${state.totalToDownload}`;
@@ -300,12 +319,25 @@ function renderSavedSearches() {
     const li = document.createElement('li');
     const labelBtn = document.createElement('button');
     labelBtn.className = 'label';
-    labelBtn.title = 'Run this search';
-    labelBtn.textContent = s.label || describeQuery(s.query, s.source);
+    const scheduleSuffix = s.schedule
+      ? ` ⏰${s.schedule.intervalDays}d`
+      : '';
+    labelBtn.title = s.schedule
+      ? `Click to run now. Auto-runs every ${s.schedule.intervalDays} day(s).`
+      : 'Run this search';
+    labelBtn.textContent = (s.label || describeQuery(s.query, s.source)) + scheduleSuffix;
     labelBtn.addEventListener('click', () => {
       writeQuery(s.query);
       qsSource.value = s.source;
       runSearch(s.query, s.source);
+    });
+    const scheduleBtn = document.createElement('button');
+    scheduleBtn.className = 'delete';
+    scheduleBtn.title = s.schedule ? 'Edit schedule' : 'Schedule recurring re-scan';
+    scheduleBtn.textContent = s.schedule ? '⏰' : '⌚';
+    scheduleBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await editSchedule(s.id);
     });
     const delBtn = document.createElement('button');
     delBtn.className = 'delete';
@@ -316,6 +348,7 @@ function renderSavedSearches() {
       await deleteSaved(s.id);
     });
     li.appendChild(labelBtn);
+    li.appendChild(scheduleBtn);
     li.appendChild(delBtn);
     savedList.appendChild(li);
   }
@@ -351,6 +384,32 @@ async function deleteSaved(id: string) {
   renderSavedSearches();
 }
 
+async function editSchedule(id: string) {
+  if (!state.settings) return;
+  const search = state.settings.savedSearches.find((s) => s.id === id);
+  if (!search) return;
+  const current = search.schedule?.intervalDays ?? 0;
+  const input = window.prompt(
+    `Re-run this search every N days (0 = disable schedule).\nNotifications will fire when new files are downloaded.`,
+    String(current || 7),
+  );
+  if (input === null) return; // cancelled
+  const days = Math.max(0, Math.min(365, parseInt(input, 10) || 0));
+  if (days === 0) {
+    search.schedule = undefined;
+  } else {
+    const notify = window.confirm('Show a desktop notification when new files are downloaded?');
+    search.schedule = {
+      intervalDays: days,
+      notify,
+      lastRunAt: search.schedule?.lastRunAt,
+      nextRunAt: Date.now() + days * 24 * 60 * 60 * 1000,
+    };
+  }
+  await saveSettings(state.settings);
+  renderSavedSearches();
+}
+
 // ---------------------------------------------------------------------------
 // Search dispatch
 // ---------------------------------------------------------------------------
@@ -373,6 +432,7 @@ async function persistCurrentSettings() {
   state.settings.maxParallel = ui.maxParallel;
   state.settings.maxPages = ui.maxPages;
   state.settings.subfolderPattern = ui.subfolderPattern;
+  state.settings.preflightCheck = ui.preflightCheck;
   state.settings.targetExtensions = filetypes.length ? filetypes : ['pdf'];
   await saveSettings(state.settings);
 }
@@ -448,6 +508,7 @@ async function init() {
   parallelInput.value = String(state.settings.maxParallel);
   maxPagesInput.value = String(state.settings.maxPages);
   subfolderInput.value = state.settings.subfolderPattern;
+  preflightInput.checked = state.settings.preflightCheck;
   renderSavedSearches();
 
   const tab = await getActiveTab();
@@ -524,6 +585,7 @@ downloadBtn.addEventListener('click', () => {
     subfolderPattern: ui.subfolderPattern,
     query: ctx?.query,
     source: ctx?.source ?? 'generic',
+    preflightCheck: ui.preflightCheck,
   });
 });
 
@@ -578,6 +640,23 @@ openDlSettingsBtn.addEventListener('click', () => {
   const isEdge = /\bEdg\//.test(navigator.userAgent);
   const url = isEdge ? 'edge://settings/downloads' : 'chrome://settings/downloads';
   chrome.tabs.create({ url }).catch((e) => logError(`Could not open ${url}: ${e}`));
+});
+
+resumeBtn.addEventListener('click', () => {
+  resumeBar.hidden = true;
+  dlSection.hidden = false;
+  dlList.innerHTML = '';
+  state.completedCount = 0;
+  state.totalToDownload = 0;
+  dlBar.value = 0;
+  dlStatus.textContent = 'Resuming…';
+  setBusy('download');
+  send({ type: 'RESUME_QUEUE' });
+});
+
+discardBtn.addEventListener('click', () => {
+  resumeBar.hidden = true;
+  send({ type: 'DISCARD_QUEUE' });
 });
 
 stopBtn.addEventListener('click', () => send({ type: 'STOP' }));

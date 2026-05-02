@@ -13,6 +13,18 @@
       <button id="library-btn" type="button" class="link" title="Open library for the most recently scanned host">Library</button>
     </header>
 
+    <!-- ===================== Resume bar ===================== -->
+    <section id="resume-bar" class="resume-bar" hidden>
+      <div class="resume-text">
+        <strong>Resume previous queue?</strong>
+        <span id="resume-detail"></span>
+      </div>
+      <div class="resume-actions">
+        <button id="resume-btn" type="button" class="primary">Resume</button>
+        <button id="discard-btn" type="button">Discard</button>
+      </div>
+    </section>
+
     <!-- ===================== Quick Search ===================== -->
     <section class="quick-search">
       <div class="section-toggle">
@@ -34,6 +46,7 @@
             <select id="qs-source">
               <option value="google">Google (auto-fallback Bing)</option>
               <option value="sitemap">Sitemap.xml</option>
+              <option value="crawl">Site crawler (BFS from homepage)</option>
               <option value="bing">Bing only</option>
             </select>
           </label>
@@ -92,6 +105,13 @@
           <button id="open-dl-settings-btn" type="button" class="link">Open browser download settings</button>
           and turn off <em>"Ask me what to do with each download"</em> (Edge) or
           <em>"Ask where to save each file before downloading"</em> (Chrome).
+        </p>
+        <label class="checkbox-row">
+          <input id="preflight-input" type="checkbox" />
+          <span>Pre-flight HEAD check (skip 404s)</span>
+        </label>
+        <p class="hint">
+          Useful for sitemap mode where many URLs may be stale. Adds ~200ms per file. Default off.
         </p>
       </div>
     </section>

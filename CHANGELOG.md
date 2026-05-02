@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-02
+
+Major feature release. Five additions that make the extension a real
+research tool, not just a bulk downloader.
+
+### Added
+- **JSON / CSV export** from the library HTML — two new buttons in the
+  controls row download the current filtered list. CSV uses RFC 4180
+  quoting + UTF-8 BOM (Excel-friendly); JSON is pretty-printed.
+- **Pre-flight HEAD check** (opt-in setting, default off) — sends a HEAD
+  request before each download with a 3s timeout. URLs that return 404/410
+  are marked `skipped` and don't consume a download slot. Especially
+  useful for sitemap mode where stale URLs are common.
+- **Resumable download queues** — the queue is persisted to
+  `chrome.storage.local` after every 5 settled items. If the service
+  worker is evicted mid-batch, opening the side panel surfaces a
+  *"Resume previous queue?"* bar showing pending count and start age.
+  Cancelled items remain pending; completed items are filtered out.
+- **BFS site crawler** as a new source mode — pulls all `a[href]` from a
+  site's homepage, follows intra-domain HTML links up to depth 2 and
+  100 pages, harvests files matching the requested extensions.
+  Useful for sites with no sitemap and patchy Google indexing.
+- **Recurring scheduled re-scans** of saved searches — click the ⌚ icon
+  next to a saved search to set an interval in days. The extension wakes
+  up via `chrome.alarms`, re-runs the scan headlessly, downloads only
+  files that aren't already in the library, and (optionally) shows a
+  desktop notification for the new files. Survives SW eviction; the
+  alarm is owned by the browser, not the extension's runtime.
+
+### Changed
+- `chrome.storage` `Settings` shape gained `preflightCheck: boolean`
+  (default false). Existing installs migrate transparently — missing
+  fields fall back to defaults via `loadSettings()`.
+- `SavedSearch` shape gained an optional `schedule` block. Old saved
+  searches without it continue to work unchanged.
+- Manifest `permissions` extended with `alarms` (recurrent re-scans)
+  and `notifications` (new-file alerts on scheduled runs).
+
+### Technical notes
+- Library HTML is regenerated after every successful batch — including
+  scheduled batches — so `Downloads/MassDownload/{host}/library.html`
+  stays in sync without manual intervention.
+- Scheduler reconciles `chrome.alarms` with saved searches on
+  `onInstalled` + `onStartup` + storage-change events. Stale alarms
+  for deleted searches are pruned automatically.
+- `cancelled` items are deliberately preserved in the persisted queue so
+  Resume can pick them up. Only `done` / `failed` / `skipped` clear from
+  the snapshot.
+- BFS crawler skips obvious binary asset extensions (.png, .css, etc.)
+  during link traversal to avoid wasted fetches.
+
 ## [0.1.1] — 2026-05-02
 
 Documentation and discoverability polish. **No functional changes** — the
@@ -55,6 +106,7 @@ Initial public release.
 - Offscreen document for `DOMParser` (not available in MV3 service workers)
 - Long-lived port between sidepanel and background for streaming progress
 
-[Unreleased]: https://github.com/bogdanpricop/MassDownload/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/bogdanpricop/MassDownload/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/bogdanpricop/MassDownload/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/bogdanpricop/MassDownload/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bogdanpricop/MassDownload/releases/tag/v0.1.0

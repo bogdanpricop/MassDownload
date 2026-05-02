@@ -13,6 +13,25 @@ chrome.runtime.onMessage.addListener((msg: OffscreenMsg, sender, sendResponse) =
       sendResponse(response);
       return true;
     }
+    if (msg.type === 'PARSE_PAGE_ANCHORS') {
+      const doc = parser.parseFromString(msg.html, 'text/html');
+      const base = doc.createElement('base');
+      base.href = msg.baseUrl;
+      doc.head.prepend(base);
+      const anchors: { url: string; text?: string }[] = [];
+      const seen = new Set<string>();
+      for (const a of Array.from(doc.querySelectorAll('a[href]'))) {
+        const href = (a as HTMLAnchorElement).href;
+        if (!href || !/^https?:/i.test(href)) continue;
+        if (seen.has(href)) continue;
+        seen.add(href);
+        const text = a.textContent?.trim();
+        anchors.push({ url: href, text: text || undefined });
+      }
+      const response: OffscreenResponse = { ok: true, kind: 'page-anchors', anchors };
+      sendResponse(response);
+      return true;
+    }
     if (msg.type === 'PARSE_SITEMAP_XML') {
       const doc = parser.parseFromString(msg.xml, 'text/xml');
       const parserError = doc.querySelector('parsererror');

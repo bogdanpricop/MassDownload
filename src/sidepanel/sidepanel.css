@@ -204,6 +204,43 @@ label input[type="number"] {
 }
 .hint em { font-style: italic; }
 
+.checkbox-row {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 4px 0;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg);
+}
+.checkbox-row input { margin: 0; }
+
+#dl-list .icon.skipped { color: var(--warn); }
+
+.resume-bar {
+  background: linear-gradient(180deg, rgba(154, 103, 0, 0.06), rgba(154, 103, 0, 0.02));
+  border-left: 3px solid var(--warn);
+  padding: 10px 14px;
+}
+.resume-bar .resume-text {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.resume-bar .resume-text strong {
+  display: block;
+  color: var(--fg);
+  margin-bottom: 2px;
+}
+.resume-bar .resume-text span {
+  color: var(--muted);
+}
+.resume-bar .resume-actions {
+  display: flex;
+  gap: 6px;
+}
+.resume-bar .resume-actions button { flex: 1; }
+
 button {
   font: inherit;
   padding: 7px 14px;

@@ -109,7 +109,7 @@ export function generateLibraryHtml(host: string, entries: LibraryEntry[]): stri
     flex-wrap: wrap;
     align-items: center;
   }
-  input[type="search"], select {
+  input[type="search"], select, button.export {
     padding: 8px 12px;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -120,6 +120,13 @@ export function generateLibraryHtml(host: string, entries: LibraryEntry[]): stri
   input[type="search"] {
     flex: 1;
     min-width: 200px;
+  }
+  button.export {
+    cursor: pointer;
+    font-size: 12px;
+  }
+  button.export:hover {
+    background: var(--bg-subtle);
   }
   input[type="search"]:focus, select:focus {
     outline: 2px solid var(--primary);
@@ -219,6 +226,8 @@ export function generateLibraryHtml(host: string, entries: LibraryEntry[]): stri
     <select id="source">
       <option value="">All sources</option>
     </select>
+    <button class="export" id="export-json" title="Download the current filtered list as JSON">↓ JSON</button>
+    <button class="export" id="export-csv" title="Download the current filtered list as CSV">↓ CSV</button>
   </div>
 </header>
 <main id="entries"></main>
@@ -327,6 +336,59 @@ function scheduleRender() {
   clearTimeout(renderTimer);
   renderTimer = setTimeout(render, 100);
 }
+
+// Export current filtered list ---------------------------------------------
+function currentFiltered() {
+  const q = document.getElementById('q').value;
+  const source = document.getElementById('source').value;
+  const sort = document.getElementById('sort').value;
+  return applySort(applyFilters(q, source), sort);
+}
+
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 250);
+}
+
+function csvEscape(s) {
+  if (s == null) return '';
+  const str = String(s);
+  // RFC 4180: wrap in quotes if it contains comma, quote, CR or LF; double up internal quotes.
+  if (/[",\r\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"';
+  return str;
+}
+
+function toCsv(rows) {
+  const headers = ['title','filename','url','description','query','source','extension','size','downloadedAt','localPath','host'];
+  const lines = [headers.join(',')];
+  for (const r of rows) {
+    lines.push(headers.map(h => {
+      const v = r[h];
+      if (h === 'downloadedAt' && typeof v === 'number') return csvEscape(new Date(v).toISOString());
+      return csvEscape(v ?? '');
+    }).join(','));
+  }
+  // BOM helps Excel detect UTF-8.
+  return '\uFEFF' + lines.join('\r\n');
+}
+
+document.getElementById('export-json').addEventListener('click', () => {
+  const data = currentFiltered();
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  downloadBlob(\`massdownload-library-\${ts}.json\`, new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+});
+
+document.getElementById('export-csv').addEventListener('click', () => {
+  const data = currentFiltered();
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  downloadBlob(\`massdownload-library-\${ts}.csv\`, new Blob([toCsv(data)], { type: 'text/csv;charset=utf-8' }));
+});
 
 document.getElementById('q').addEventListener('input', scheduleRender);
 document.getElementById('source').addEventListener('change', render);

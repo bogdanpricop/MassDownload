@@ -1,6 +1,6 @@
 {
   "name": "massdownload",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Chrome extension that mass-downloads files (PDFs etc.) from Google search results across all pages, or any page with links.",
   "type": "module",

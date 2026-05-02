@@ -6,6 +6,15 @@ import { canonicalizeUrl, filterAndDedup } from './parsers/filters';
 import { startQueue, type DownloaderHandle } from './downloader';
 import { addEntries, getEntries, knownCanonicalUrls } from './library/manifest';
 import { generateLibraryHtml } from './library/htmlGenerator';
+import {
+  clearQueueState,
+  loadQueueState,
+  pendingItems,
+  saveQueueState,
+  type PersistedQueue,
+} from './queueState';
+import { findScheduledSearch, reconcileAlarms, recordScheduledRun } from './scheduler';
+import { loadSettings } from './storage';
 import type {
   BackgroundMsg,
   OffscreenMsg,
@@ -20,6 +29,13 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((e) => console.error('[MassDownload] setPanelBehavior failed:', e));
+  void reconcileAlarms();
+});
+
+// Re-run reconciliation on SW startup so alarms survive eviction even if
+// onInstalled doesn't fire.
+chrome.runtime.onStartup.addListener(() => {
+  void reconcileAlarms();
 });
 
 // ---------------------------------------------------------------------------
@@ -579,6 +595,121 @@ async function scanBingSerp(
 }
 
 // ---------------------------------------------------------------------------
+// BFS site crawler
+// ---------------------------------------------------------------------------
+
+const CRAWL_MAX_DEPTH = 2;
+const CRAWL_MAX_PAGES = 100;
+const CRAWL_TIMEOUT_PER_PAGE_MS = 8000;
+
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    return ua.hostname === ub.hostname;
+  } catch {
+    return false;
+  }
+}
+
+function looksLikeHtml(url: string): boolean {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    // Skip obvious binary asset extensions to avoid wasting fetches.
+    return !/\.(png|jpe?g|gif|webp|svg|ico|css|js|mjs|map|woff2?|ttf|eot|otf|mp[34]|mov|avi|zip|tar|gz|rar|7z|pdf|docx?|xlsx?|pptx?|epub)(\?|$)/i.test(path);
+  } catch {
+    return false;
+  }
+}
+
+interface CrawlResult {
+  items: LinkInfo[];
+  visited: number;
+  errorDetail?: string;
+}
+
+async function scanCrawl(
+  port: chrome.runtime.Port,
+  siteOrigin: string,
+  signal: AbortSignal,
+  extensions: string[],
+): Promise<CrawlResult> {
+  const visited = new Set<string>();
+  const queue: { url: string; depth: number }[] = [{ url: siteOrigin, depth: 0 }];
+  const found = new Map<string, LinkInfo>();
+  let lastError: string | undefined;
+
+  // Pre-build extension matcher for early discard.
+  const extPattern =
+    extensions.length === 0
+      ? null
+      : new RegExp(`\\.(${extensions.map((e) => e.replace(/^\./, '').toLowerCase()).join('|')})(?:$|[?#])`, 'i');
+
+  while (queue.length > 0 && visited.size < CRAWL_MAX_PAGES && !signal.aborted) {
+    const next = queue.shift();
+    if (!next) break;
+    if (visited.has(next.url)) continue;
+    if (next.depth > CRAWL_MAX_DEPTH) continue;
+    visited.add(next.url);
+
+    const ac = new AbortController();
+    const onParentAbort = () => ac.abort();
+    signal.addEventListener('abort', onParentAbort, { once: true });
+    const timer = setTimeout(() => ac.abort(), CRAWL_TIMEOUT_PER_PAGE_MS);
+
+    let html = '';
+    try {
+      const res = await fetch(next.url, { signal: ac.signal, redirect: 'follow' });
+      if (!res.ok) {
+        lastError = `${next.url}: HTTP ${res.status}`;
+        continue;
+      }
+      const ct = res.headers.get('content-type') ?? '';
+      if (!/text\/html|application\/xhtml/.test(ct)) continue;
+      html = await res.text();
+    } catch (e) {
+      if (signal.aborted) break;
+      lastError = `${next.url}: ${e instanceof Error ? e.message : String(e)}`;
+      continue;
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onParentAbort);
+    }
+
+    const parsed = await callOffscreen({ type: 'PARSE_PAGE_ANCHORS', html, baseUrl: next.url });
+    if (!parsed.ok || parsed.kind !== 'page-anchors') {
+      lastError = `${next.url}: ${parsed.ok ? 'wrong kind' : parsed.error}`;
+      continue;
+    }
+
+    let newFiles = 0;
+    for (const a of parsed.anchors) {
+      if (!sameOrigin(a.url, siteOrigin)) continue; // intra-domain only
+      if (extPattern && extPattern.test(a.url)) {
+        // It's a target file
+        if (!found.has(a.url)) {
+          found.set(a.url, { url: a.url, title: a.text });
+          newFiles++;
+        }
+      } else if (looksLikeHtml(a.url) && !visited.has(a.url) && next.depth + 1 <= CRAWL_MAX_DEPTH) {
+        // It's another page to explore
+        queue.push({ url: a.url, depth: next.depth + 1 });
+      }
+    }
+
+    send(port, {
+      type: 'SCAN_PROGRESS',
+      page: visited.size,
+      foundOnPage: newFiles,
+      totalUnique: found.size,
+      note: `crawl depth ${next.depth} (${visited.size}/${CRAWL_MAX_PAGES} pages)`,
+    });
+  }
+
+  return { items: [...found.values()], visited: visited.size, errorDetail: lastError };
+}
+
+// ---------------------------------------------------------------------------
 // Sitemap crawler
 // ---------------------------------------------------------------------------
 
@@ -783,6 +914,31 @@ async function scanFromQuery(
   const ac = new AbortController();
   session.scanAbort = ac;
 
+  if (source === 'crawl') {
+    if (!query.site) {
+      await emitFinal(session, [], extensions, { reason: 'UNKNOWN', detail: 'site is required for crawl mode' });
+      return;
+    }
+    const origin = buildSiteOrigin(query.site);
+    if (!origin) {
+      await emitFinal(session, [], extensions, { reason: 'UNKNOWN', detail: 'invalid site' });
+      return;
+    }
+    send(session.port, { type: 'SCAN_STARTED', mode: 'sitemap' });
+    const { items, errorDetail } = await scanCrawl(session.port, origin, ac.signal, extensions);
+    if (ac.signal.aborted) {
+      send(session.port, { type: 'STOPPED' });
+      session.scanAbort = null;
+      return;
+    }
+    if (errorDetail && items.length === 0) {
+      await emitFinal(session, items, extensions, { reason: 'NETWORK', detail: errorDetail });
+      return;
+    }
+    await emitFinal(session, items, extensions);
+    return;
+  }
+
   if (source === 'sitemap') {
     if (!query.site) {
       emitFinal(session, [], extensions, { reason: 'UNKNOWN', detail: 'site is required for sitemap mode' });
@@ -952,6 +1108,94 @@ async function regenerateLibrariesForHosts(hosts: Iterable<string>): Promise<voi
 }
 
 // ---------------------------------------------------------------------------
+// Resumable download queue runner
+// ---------------------------------------------------------------------------
+
+interface QueueRunOpts {
+  items: import('./types').LinkInfo[];
+  maxParallel: number;
+  subfolderPattern: string;
+  query?: string;
+  source: import('./types').SearchSource | 'tab' | 'generic';
+  preflightCheck?: boolean;
+  startedAt: number;
+  completedIds: string[];
+}
+
+async function runDownloadQueue(session: Session, opts: QueueRunOpts): Promise<void> {
+  // Persist initial snapshot so a SW eviction mid-queue doesn't lose work.
+  const persisted: PersistedQueue = {
+    items: opts.items,
+    completedIds: [...opts.completedIds],
+    maxParallel: opts.maxParallel,
+    subfolderPattern: opts.subfolderPattern,
+    query: opts.query,
+    source: opts.source,
+    preflightCheck: opts.preflightCheck,
+    startedAt: opts.startedAt,
+  };
+  await saveQueueState(persisted);
+
+  // Throttle storage writes — every 5 settled items we flush completedIds.
+  let dirty = 0;
+  const flush = async () => {
+    if (dirty === 0) return;
+    dirty = 0;
+    await saveQueueState(persisted);
+  };
+
+  const handle = startQueue({
+    items: opts.items,
+    maxParallel: opts.maxParallel,
+    subfolderPattern: opts.subfolderPattern,
+    query: opts.query,
+    source: opts.source,
+    preflightCheck: opts.preflightCheck,
+    onItem: (item) => send(session.port, { type: 'DOWNLOAD_PROGRESS', item }),
+    onItemSettled: (link, status) => {
+      // Cancelled items remain pending so the user can resume them.
+      if (status === 'cancelled') return;
+      const id = canonicalizeUrl(link.url);
+      if (id) persisted.completedIds.push(id);
+      dirty++;
+      if (dirty >= 5) {
+        // Fire-and-forget; no need to await per-item.
+        void flush();
+      }
+    },
+  });
+  session.downloader = handle;
+  const result = await handle.done;
+  session.downloader = null;
+  await flush();
+
+  if (result.newEntries.length) {
+    try {
+      await addEntries(result.newEntries);
+      await regenerateLibrariesForHosts(result.affectedHosts);
+    } catch (e) {
+      console.error('[MassDownload] library update failed:', e);
+    }
+  }
+
+  // Cancelled means the user hit Stop — keep the snapshot for a future Resume.
+  // Otherwise (done/failed/skipped only): clear the persisted state.
+  if (result.cancelled === 0) {
+    await clearQueueState();
+  } else {
+    await flush();
+  }
+
+  send(session.port, {
+    type: 'DOWNLOAD_DONE',
+    ok: result.ok,
+    failed: result.failed,
+    cancelled: result.cancelled,
+    skipped: result.skipped,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Port handlers
 // ---------------------------------------------------------------------------
 
@@ -966,6 +1210,29 @@ chrome.runtime.onConnect.addListener((port) => {
     session.downloader?.stop();
     sessions.delete(session);
   });
+
+  // If there's a leftover queue from a previous SW lifetime, surface it once.
+  void (async () => {
+    try {
+      const persisted = await loadQueueState();
+      if (!persisted) return;
+      // Don't surface if a download is already running in this session.
+      if (session.downloader) return;
+      const pending = pendingItems(persisted);
+      if (pending.length === 0) {
+        await clearQueueState();
+        return;
+      }
+      send(port, {
+        type: 'QUEUE_RESUMABLE',
+        pendingCount: pending.length,
+        totalCount: persisted.items.length,
+        startedAt: persisted.startedAt,
+      });
+    } catch (e) {
+      console.warn('[MassDownload] resume check failed:', e);
+    }
+  })();
 
   port.onMessage.addListener(async (msg: SidepanelMsg) => {
     try {
@@ -991,34 +1258,46 @@ chrome.runtime.onConnect.addListener((port) => {
             send(port, { type: 'SCAN_ERROR', reason: 'UNKNOWN', detail: 'A download queue is already running' });
             return;
           }
-          const handle = startQueue({
+          await runDownloadQueue(session, {
             items: msg.items,
             maxParallel: msg.maxParallel,
             subfolderPattern: msg.subfolderPattern,
             query: msg.query,
             source: msg.source,
-            onItem: (item) => send(port, { type: 'DOWNLOAD_PROGRESS', item }),
+            preflightCheck: msg.preflightCheck,
+            startedAt: Date.now(),
+            completedIds: [],
           });
-          session.downloader = handle;
-          const result = await handle.done;
-          session.downloader = null;
-
-          // Persist new entries to the library and regenerate per-host HTML.
-          if (result.newEntries.length) {
-            try {
-              await addEntries(result.newEntries);
-              await regenerateLibrariesForHosts(result.affectedHosts);
-            } catch (e) {
-              console.error('[MassDownload] library update failed:', e);
-            }
+          break;
+        }
+        case 'RESUME_QUEUE': {
+          if (session.downloader) {
+            send(port, { type: 'SCAN_ERROR', reason: 'UNKNOWN', detail: 'A download queue is already running' });
+            return;
           }
-
-          send(port, {
-            type: 'DOWNLOAD_DONE',
-            ok: result.ok,
-            failed: result.failed,
-            cancelled: result.cancelled,
+          const persisted = await loadQueueState();
+          if (!persisted) return;
+          const remaining = pendingItems(persisted);
+          if (remaining.length === 0) {
+            await clearQueueState();
+            return;
+          }
+          // Reset items to only the pending ones; keep the same start time and
+          // existing completedIds list so we don't double-count.
+          await runDownloadQueue(session, {
+            items: remaining,
+            maxParallel: persisted.maxParallel,
+            subfolderPattern: persisted.subfolderPattern,
+            query: persisted.query,
+            source: persisted.source,
+            preflightCheck: persisted.preflightCheck,
+            startedAt: persisted.startedAt,
+            completedIds: persisted.completedIds,
           });
+          break;
+        }
+        case 'DISCARD_QUEUE': {
+          await clearQueueState();
           break;
         }
         case 'STOP': {
@@ -1039,4 +1318,108 @@ chrome.runtime.onConnect.addListener((port) => {
       });
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// Scheduler: alarm-driven re-scans of saved searches
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a saved search headlessly, download new files only, optionally notify.
+ * The scan results pass through the same dedup-by-library logic so already-
+ * downloaded items don't get re-fetched.
+ */
+async function runScheduledScan(searchId: string): Promise<void> {
+  const search = await findScheduledSearch(`massdl-search:${searchId}`);
+  if (!search?.schedule) return;
+
+  // Build a synthetic session backed by a no-op port. The scan helpers expect a
+  // chrome.runtime.Port for SCAN_PROGRESS/SCAN_DONE — we satisfy them with a
+  // shim that swallows postMessage. The download path uses session.downloader.
+  const noopPort = {
+    postMessage: () => undefined,
+    disconnect: () => undefined,
+    name: 'massdl-scheduler',
+    onMessage: { addListener: () => undefined, removeListener: () => undefined } as never,
+    onDisconnect: { addListener: () => undefined, removeListener: () => undefined } as never,
+  } as unknown as chrome.runtime.Port;
+
+  const session: Session = {
+    port: noopPort,
+    scanAbort: null,
+    downloader: null,
+    scanTabId: null,
+  };
+
+  // Capture SCAN_DONE items from the noop port via a wrapper.
+  let scanItems: import('./types').LinkInfo[] | null = null;
+  const origPostMessage = noopPort.postMessage;
+  (noopPort as { postMessage: (m: BackgroundMsg) => void }).postMessage = (m: BackgroundMsg) => {
+    if (m.type === 'SCAN_DONE') scanItems = m.items;
+    return (origPostMessage as () => void)();
+  };
+
+  try {
+    const settings = await loadSettings();
+    const extensions = search.query.filetypes ?? settings.targetExtensions;
+    await scanFromQuery(session, search.query, search.source, extensions, settings.maxPages);
+
+    // Filter to items that are NEW (not already in the library).
+    const items: import('./types').LinkInfo[] = scanItems ?? [];
+    const newItems = items.filter((it) => !it.alreadyHave);
+    if (newItems.length === 0) {
+      await recordScheduledRun(searchId);
+      return;
+    }
+
+    // Run download queue with library integration. We don't need to surface
+    // progress messages — there's no UI subscriber.
+    const handle = startQueue({
+      items: newItems,
+      maxParallel: settings.maxParallel,
+      subfolderPattern: settings.subfolderPattern,
+      query: `[scheduled] ${search.label}`,
+      source: search.source,
+      preflightCheck: settings.preflightCheck,
+      onItem: () => undefined,
+    });
+    const result = await handle.done;
+
+    if (result.newEntries.length) {
+      await addEntries(result.newEntries);
+      await regenerateLibrariesForHosts(result.affectedHosts);
+    }
+
+    if (search.schedule.notify && result.ok > 0) {
+      try {
+        await chrome.notifications.create({
+          type: 'basic',
+          iconUrl: chrome.runtime.getURL('icon-128.png'),
+          title: 'MassDownload — new files',
+          message: `"${search.label}": ${result.ok} new file${result.ok === 1 ? '' : 's'} downloaded.`,
+          priority: 1,
+        });
+      } catch {
+        // Notification icon may not exist; degrade silently.
+      }
+    }
+
+    await recordScheduledRun(searchId);
+  } catch (e) {
+    console.error('[MassDownload] scheduled run failed:', e);
+  }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (!alarm.name.startsWith('massdl-search:')) return;
+  const id = alarm.name.slice('massdl-search:'.length);
+  void runScheduledScan(id);
+});
+
+// Re-reconcile whenever saved searches change (storage observer is cheaper than
+// requiring every CRUD path to call reconcileAlarms manually).
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local') return;
+  if (!('settings' in changes)) return;
+  void reconcileAlarms();
 });

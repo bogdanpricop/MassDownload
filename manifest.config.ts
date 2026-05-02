@@ -3,10 +3,10 @@ import { defineManifest } from '@crxjs/vite-plugin';
 export default defineManifest({
   manifest_version: 3,
   name: 'MassDownload',
-  version: '0.1.1',
+  version: '0.2.0',
   description:
     'Mass-download files (PDF, etc.) from Google search results across all pages, or from any page with links.',
-  permissions: ['sidePanel', 'downloads', 'activeTab', 'scripting', 'storage', 'offscreen', 'tabs'],
+  permissions: ['sidePanel', 'downloads', 'activeTab', 'scripting', 'storage', 'offscreen', 'tabs', 'alarms', 'notifications'],
   host_permissions: ['<all_urls>'],
   action: {
     default_title: 'MassDownload — open side panel',

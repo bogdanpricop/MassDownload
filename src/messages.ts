@@ -27,9 +27,15 @@ export type SidepanelMsg =
       query?: string;
       /** Source engine / mode that produced these items. */
       source: SearchSource | 'tab' | 'generic';
+      /** Pre-flight HEAD check to skip 404s before queuing download. */
+      preflightCheck?: boolean;
     }
   | { type: 'STOP' }
-  | { type: 'PING' };
+  | { type: 'PING' }
+  /** Resume a previously-interrupted queue (uses persisted state). */
+  | { type: 'RESUME_QUEUE' }
+  /** Discard the persisted queue without resuming. */
+  | { type: 'DISCARD_QUEUE' };
 
 // From background → sidepanel
 export type BackgroundMsg =
@@ -38,18 +44,23 @@ export type BackgroundMsg =
   | { type: 'SCAN_DONE'; items: LinkInfo[] }
   | { type: 'SCAN_ERROR'; reason: ScanErrorReason; detail?: string }
   | { type: 'DOWNLOAD_PROGRESS'; item: DownloadItem }
-  | { type: 'DOWNLOAD_DONE'; ok: number; failed: number; cancelled: number }
+  | { type: 'DOWNLOAD_DONE'; ok: number; failed: number; cancelled: number; skipped: number }
   | { type: 'STOPPED' }
-  | { type: 'PONG' };
+  | { type: 'PONG' }
+  /** Emitted on side panel reconnect when there's a previously-interrupted queue
+   *  to offer the user a "Resume?" prompt. */
+  | { type: 'QUEUE_RESUMABLE'; pendingCount: number; totalCount: number; startedAt: number };
 
 // Offscreen document parses HTML/XML — request/response over chrome.runtime.sendMessage.
 // Google scanning runs entirely in a real tab via `chrome.scripting.executeScript`,
 // so it doesn't need offscreen.
 export type OffscreenMsg =
   | { type: 'PARSE_BING_HTML'; html: string }
-  | { type: 'PARSE_SITEMAP_XML'; xml: string };
+  | { type: 'PARSE_SITEMAP_XML'; xml: string }
+  | { type: 'PARSE_PAGE_ANCHORS'; html: string; baseUrl: string };
 
 export type OffscreenResponse =
   | { ok: true; kind: 'bing'; items: LinkInfo[]; isCaptcha: boolean }
   | { ok: true; kind: 'sitemap'; urls: string[]; sitemapIndex: string[] }
+  | { ok: true; kind: 'page-anchors'; anchors: { url: string; text?: string }[] }
   | { ok: false; error: string };
