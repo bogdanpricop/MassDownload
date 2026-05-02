@@ -52,19 +52,34 @@ A "Save" button stores the current query (site + filetypes + keywords + exclude 
 | `chrome.scripting` | Generic-page link extraction via inline `func` |
 | `chrome.downloads` | File downloads with `conflictAction: 'uniquify'` |
 
-### Build & install
+## Install
+
+### Option A — Pre-built zip (no Node.js required) ⭐ recommended for users
+
+1. Go to the [latest release](https://github.com/bogdanpricop/MassDownload/releases/latest).
+2. Download `MassDownload-v0.1.0.zip` from the release assets.
+3. Extract the archive somewhere stable (e.g. `C:\Users\you\Apps\MassDownload\`). **Don't pick a temp folder** — the browser will keep loading the extension from this path, so deleting the folder later breaks it.
+4. Open the extension manager:
+   - Chrome / Brave / Vivaldi: `chrome://extensions`
+   - Microsoft Edge: `edge://extensions`
+5. Toggle **Developer mode** (top-right in Chrome, left sidebar in Edge).
+6. Click **Load unpacked** and select the extracted folder (the one that contains `manifest.json`).
+7. Pin the MassDownload icon to the toolbar — click it on any tab to open the side panel.
+
+To update later: download the new zip, replace the folder contents, then click the **🔄 Reload** button on the extension's card in `chrome://extensions`.
+
+### Option B — Build from source (developers)
+
+Requires Node.js 18+ and npm.
 
 ```bash
+git clone https://github.com/bogdanpricop/MassDownload.git
+cd MassDownload
 npm install
-npm run build       # outputs dist/
+npm run build      # outputs dist/
 ```
 
-Then in Chrome:
-
-1. Open `chrome://extensions`
-2. Enable **Developer mode**
-3. **Load unpacked** → select the `dist/` folder
-4. Pin the icon, click it on any tab → side panel opens
+Then in your browser: `chrome://extensions` (or `edge://extensions`) → **Developer mode** → **Load unpacked** → select the `dist/` folder.
 
 ### Dev with HMR
 
