@@ -38,13 +38,22 @@ Saved searches let you re-run a query in one click. Sitemap mode finds files Goo
 
 ## Screenshots
 
-> 📸 _Screenshots coming soon — see [issue #1](https://github.com/bogdanpricop/MassDownload/issues) if you'd like to contribute one._
-
-<!-- TODO: capture and embed
-- docs/screenshots/sidepanel-search.png  (Quick Search form filled in)
-- docs/screenshots/results-list.png       (Results with "in library" badges)
-- docs/screenshots/library-html.png       (library.html with live search)
--->
+<table>
+<tr>
+<td width="33%" align="center">
+<img src="docs/screenshots/sidepanel-search.png" alt="Quick Search form in the side panel" /><br/>
+<sub><b>Quick Search</b> — site, filetype, source, keywords. Saved searches re-run in one click.</sub>
+</td>
+<td width="33%" align="center">
+<img src="docs/screenshots/sidepanel-results.png" alt="Scan results with already-in-library badges" /><br/>
+<sub><b>Scan results</b> — counter shows new vs already-downloaded. Files in the library are unchecked by default.</sub>
+</td>
+<td width="33%" align="center">
+<img src="docs/screenshots/library-html.png" alt="Per-host library.html with live search" /><br/>
+<sub><b>Per-host library</b> — single-file HTML with live search, sort, filter, and <code>file://</code> links to local downloads.</sub>
+</td>
+</tr>
+</table>
 
 ## Install
 
