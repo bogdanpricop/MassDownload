@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-05-02
+
+Documentation and discoverability polish. **No functional changes** — the
+extension behavior is identical to 0.1.0; the zip is rebuilt only so the
+manifest version stays in sync.
+
+### Added
+- MIT `LICENSE`
+- `CHANGELOG.md` (Keep a Changelog format)
+- `CONTRIBUTING.md` with style guide, conventional-commit prefixes, and a
+  good-first-issue roadmap
+- `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config.yml}` —
+  blank issues disabled, Discussions linked
+- UI screenshots in `docs/screenshots/` (Quick Search, results, library,
+  social preview) embedded in README
+- Repo metadata: 16 GitHub topics, sharper description, Discussions enabled
+
+### Changed
+- README rewritten for discoverability: hero block with shields.io badges,
+  TOC, comparison table vs DownThemAll / Simple Mass Downloader / wget /
+  SerpAPI, audience-specific use-case sections, FAQ
+- Install instructions split into Option A (pre-built zip, recommended) and
+  Option B (build from source)
+
 ## [0.1.0] — 2026-05-02
 
 Initial public release.
@@ -31,5 +55,6 @@ Initial public release.
 - Offscreen document for `DOMParser` (not available in MV3 service workers)
 - Long-lived port between sidepanel and background for streaming progress
 
-[Unreleased]: https://github.com/bogdanpricop/MassDownload/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/bogdanpricop/MassDownload/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/bogdanpricop/MassDownload/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bogdanpricop/MassDownload/releases/tag/v0.1.0
