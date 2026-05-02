@@ -4,15 +4,30 @@
 
 **A Chrome/Edge extension that scrapes Google, Bing, or sitemap.xml — across all pages — and bulk-downloads the files it finds, into a searchable local library.**
 
+[![CI](https://github.com/bogdanpricop/MassDownload/actions/workflows/ci.yml/badge.svg)](https://github.com/bogdanpricop/MassDownload/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Latest release](https://img.shields.io/github/v/release/bogdanpricop/MassDownload)](https://github.com/bogdanpricop/MassDownload/releases/latest)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Code size](https://img.shields.io/github/languages/code-size/bogdanpricop/MassDownload)](https://github.com/bogdanpricop/MassDownload)
 
-[Install](#install) • [How it works](#how-it-works) • [Comparison](#comparison) • [Use cases](#use-cases) • [FAQ](#faq) • [Contributing](#contributing)
+[Quickstart](#30-second-quickstart) • [Install](#install) • [How it works](#how-it-works) • [Comparison](#comparison) • [Use cases](#use-cases) • [FAQ](#faq) • [Contributing](#contributing)
 
 </div>
+
+---
+
+## 30-second quickstart
+
+After [installing](#install):
+
+1. Click the **MassDownload** icon in your browser toolbar — the side panel opens
+2. Fill in **Site** = `data.gov` (or any domain), **Filetype** = `pdf`, leave Source on Google
+3. Click **Search** — the extension paginates through Google in a real background tab
+4. Pick the files you want and click **Download selected** — they land in `Downloads/MassDownload/data.gov/`
+5. Click **Library** to browse a per-host HTML index of everything you've collected, with live search
+
+That's the whole loop. The rest of this README covers tuning, alternative sources (Bing, sitemap.xml), and edge cases.
 
 ---
 
