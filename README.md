@@ -4,10 +4,10 @@ Mass-download files (PDFs, docs, anything) from a website by querying **Google**
 
 ## Use case
 
-You're collecting documents from a domain — say `bej-cojocaru.ro` for PDFs of court decisions. Without MassDownload you'd have to:
+You're collecting documents from a domain — say `website-domain.ro` for PDFs of court decisions. Without MassDownload you'd have to:
 
 1. Open Google
-2. Type `site:bej-cojocaru.ro filetype:pdf`
+2. Type `site:website-domain.ro filetype:pdf`
 3. Click each PDF
 4. Paginate through 10+ Google pages
 5. Repeat for the next site
@@ -15,7 +15,7 @@ You're collecting documents from a domain — say `bej-cojocaru.ro` for PDFs of 
 With MassDownload:
 
 1. Click the toolbar icon
-2. In the side panel: site = `bej-cojocaru.ro`, filetype = `pdf`
+2. In the side panel: site = `website-domain.ro`, filetype = `pdf`
 3. Click **Search** → all PDFs across all pages are listed
 4. Click **Download selected** → all are downloaded in parallel
 
@@ -35,7 +35,7 @@ The side panel also has a **Scan tab** button: parses the active tab as Google S
 
 When Google/Bing supply a result title (`<h3>` text), it's used as the filename instead of the URL pathname. So:
 
-- URL `https://example.com/cgi-bin/dl.php?id=7821` + title `"Decizia 312/2024 Cojocaru"` → file `Decizia 312_2024 Cojocaru.pdf`
+- URL `https://example.com/cgi-bin/dl.php?id=7821` + title `"Decizia 312/2024"` → file `Decizia 312_2024.pdf`
 - URL `https://example.com/papers/foo.pdf` (no title from snippet) → file `foo.pdf`
 
 ## Saved searches
