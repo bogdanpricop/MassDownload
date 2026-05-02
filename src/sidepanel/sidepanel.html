@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MassDownload</title>
+    <link rel="stylesheet" href="./sidepanel.css" />
+  </head>
+  <body>
+    <header>
+      <h1>MassDownload</h1>
+      <span id="mode-badge" class="badge"></span>
+      <button id="library-btn" type="button" class="link" title="Open library for the most recently scanned host">Library</button>
+    </header>
+
+    <!-- ===================== Quick Search ===================== -->
+    <section class="quick-search">
+      <div class="section-toggle">
+        <strong>Quick search</strong>
+        <button id="qs-toggle" type="button" class="link" aria-expanded="true">Hide</button>
+      </div>
+      <div id="qs-body">
+        <label>
+          Site (no protocol)
+          <input id="qs-site" type="text" placeholder="bej-cojocaru.ro" autocomplete="off" />
+        </label>
+        <div class="row">
+          <label>
+            Filetype(s)
+            <input id="qs-filetypes" type="text" value="pdf" placeholder="pdf, docx" />
+          </label>
+          <label>
+            Source
+            <select id="qs-source">
+              <option value="google">Google (auto-fallback Bing)</option>
+              <option value="sitemap">Sitemap.xml</option>
+              <option value="bing">Bing only</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Keywords (optional)
+          <input id="qs-keywords" type="text" placeholder="hotarare 2024" autocomplete="off" />
+        </label>
+        <label>
+          Exclude (comma-separated, optional)
+          <input id="qs-exclude" type="text" placeholder="inurl:archive, draft" autocomplete="off" />
+        </label>
+        <div class="actions">
+          <button id="qs-search-btn" type="button" class="primary">Search</button>
+          <button id="qs-save-btn" type="button">Save</button>
+          <button id="qs-tab-btn" type="button" title="Scan the active tab instead">Scan tab</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Saved searches ===================== -->
+    <section class="saved" id="saved-section" hidden>
+      <div class="section-toggle">
+        <strong>Saved searches</strong>
+      </div>
+      <ul id="saved-list"></ul>
+    </section>
+
+    <!-- ===================== Settings ===================== -->
+    <section class="settings">
+      <div class="section-toggle">
+        <strong>Settings</strong>
+        <button id="settings-toggle" type="button" class="link" aria-expanded="false">Show</button>
+      </div>
+      <div id="settings-body" hidden>
+        <div class="row">
+          <label>
+            Parallel
+            <input id="parallel-input" type="number" min="1" max="20" value="5" />
+          </label>
+          <label>
+            Max pages
+            <input id="maxpages-input" type="number" min="1" max="50" value="20" />
+          </label>
+        </div>
+        <label>
+          Subfolder (relative to Downloads, supports <code>{host}</code>)
+          <div class="row inline">
+            <input id="subfolder-input" type="text" placeholder="MassDownload/{host}" />
+            <button id="pick-folder-btn" type="button" title="Pick a target folder via the system dialog">Pick…</button>
+          </div>
+        </label>
+        <p class="hint">
+          Files save automatically to <code>Downloads/[subfolder]/</code> without per-file prompts.
+          If your browser asks <em>"What do you want to do with X.pdf?"</em> for each file:
+          <button id="open-dl-settings-btn" type="button" class="link">Open browser download settings</button>
+          and turn off <em>"Ask me what to do with each download"</em> (Edge) or
+          <em>"Ask where to save each file before downloading"</em> (Chrome).
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================== Status ===================== -->
+    <section class="scan-progress" id="scan-progress" hidden>
+      <div class="status" id="scan-status">Ready.</div>
+      <button id="stop-btn" type="button" disabled>Stop</button>
+    </section>
+
+    <!-- ===================== Results ===================== -->
+    <section class="results" id="results-section" hidden>
+      <div class="results-header">
+        <strong id="results-count">0 results</strong>
+        <span>
+          <button id="select-all-btn" type="button" class="link">All</button>
+          <button id="select-none-btn" type="button" class="link">None</button>
+        </span>
+      </div>
+      <ul id="results-list"></ul>
+      <button id="download-btn" type="button" class="primary">Download selected</button>
+    </section>
+
+    <!-- ===================== Download progress ===================== -->
+    <section class="download-progress" id="download-progress" hidden>
+      <progress id="dl-bar" value="0" max="1"></progress>
+      <div class="status" id="dl-status"></div>
+      <ul id="dl-list"></ul>
+    </section>
+
+    <!-- ===================== Log ===================== -->
+    <section class="log" id="log-section" hidden>
+      <h2>Log</h2>
+      <ul id="log-list"></ul>
+    </section>
+
+    <script type="module" src="./sidepanel.ts"></script>
+  </body>
+</html>
