@@ -94,10 +94,11 @@ Requires Node.js 18+ and npm.
 git clone https://github.com/bogdanpricop/MassDownload.git
 cd MassDownload
 npm install
-npm run build      # outputs dist/
+npm run build              # outputs dist/         (Chrome / Edge)
+npm run build:firefox      # outputs dist-firefox/ (experimental)
 ```
 
-Then in your browser: `chrome://extensions` → **Developer mode** → **Load unpacked** → select `dist/`.
+Then in your browser: `chrome://extensions` → **Developer mode** → **Load unpacked** → select `dist/` (or `dist-firefox/` for Firefox via `about:debugging`).
 
 ### Dev with HMR
 
@@ -131,17 +132,12 @@ When Google/Bing supply a result title, it's used as the filename instead of the
 
 ### Per-host library
 
-Every successfully downloaded file is recorded in `chrome.storage.local` with metadata: title, snippet description, query that found it, source engine, host, timestamp, size. After each download batch, a **standalone `library.html`** is regenerated for that host with:
+Every successfully downloaded file is recorded in `chrome.storage.local` with metadata: title, snippet description, query that found it, source engine, host, timestamp, size. There are **two views** of the library:
 
-- Live search across title, description, query, URL, filename
-- Sort by date / title / size
-- Filter by source engine
-- Stats footer (`13 files · 4.5 MB`)
-- Light/dark theme via `prefers-color-scheme`
-- `file://` links to the local files
-- External links to the original URL on the source site
+1. **In-extension editable page** (click **Library** in the side panel) — full search, filters by host/source/tag, plus per-entry editing: custom title, tags, notes, remove from library, show in folder. JSON / CSV / portable-HTML export.
+2. **Standalone `Downloads/MassDownload/{host}/library.html`** — auto-regenerated after each batch (and on every edit). Live search, sort, filter, `file://` links to local files. **Fully self-contained** — open from USB stick, email to a colleague, archive. Zero external dependencies.
 
-The HTML is **fully self-contained** — open it from a USB stick, email it to a colleague, archive it. Zero external dependencies.
+The on-disk HTML is read-only; tags/notes/custom titles are added in the in-extension page and propagate to the on-disk version on save.
 
 ### Scan-time dedup
 
@@ -290,7 +286,7 @@ All persist via `chrome.storage.local`.
 ## FAQ
 
 **Q: Does this work on Firefox?**
-A: Not yet. Manifest V3 + side panel APIs need adaptation. PRs welcome.
+A: As of v0.3.0 there's an **experimental** Firefox build (`npm run build:firefox`). It uses `sidebar_action` instead of `chrome.sidePanel`, parses HTML inline (no offscreen document), and sets a `browser_specific_settings.gecko` block. It compiles and loads via `about:debugging`, but hasn't been daily-driven yet. Bug reports welcome.
 
 **Q: Will this get me in trouble with Google?**
 A: It uses your real browser session for SERP scraping (no API key, no rotation). At low volume (a few sites a day) you'll rarely hit CAPTCHA. At high volume Google may temporarily challenge you — solve it in the tab the extension surfaces, then continue.

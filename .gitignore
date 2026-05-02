@@ -1,8 +1,10 @@
 node_modules/
 dist/
+dist-firefox/
 .vite/
 *.log
 .DS_Store
 .claude/
 # Release artifacts — go to GitHub Releases, not the repo
 MassDownload-v*.zip
+MassDownload-firefox-v*.zip

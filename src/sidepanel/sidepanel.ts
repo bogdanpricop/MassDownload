@@ -609,7 +609,8 @@ pickFolderBtn.addEventListener('click', async () => {
 });
 
 libraryBtn.addEventListener('click', async () => {
-  // Pick the most relevant host: last download host > active tab host > nothing
+  // Open the in-extension editable library page. If we know a host context
+  // (last download or active tab), pre-filter to that host.
   let host = state.lastDownloadHosts[0];
   if (!host) {
     const tab = await getActiveTab();
@@ -617,22 +618,8 @@ libraryBtn.addEventListener('click', async () => {
       try { host = new URL(tab.url).hostname.toLowerCase().replace(/^www\./, ''); } catch { /* ignore */ }
     }
   }
-  if (!host) {
-    logError('No host known yet — run a scan first');
-    return;
-  }
-  // Find the matching library.html download (already saved by background) and reveal it.
-  // Library file name pattern: "MassDownload/<host>/library.html"
-  const needle = `MassDownload\\${host}\\library.html`.replace(/\\/g, '/');
-  chrome.downloads.search({ orderBy: ['-startTime'], limit: 50 }, (results) => {
-    const hit = results.find((r) => r.filename.replace(/\\/g, '/').endsWith(needle));
-    if (!hit) {
-      logError(`No library yet for ${host} — download some files first`);
-      return;
-    }
-    // Show in folder if file:// access isn't enabled (Edge/Chrome default).
-    chrome.downloads.show(hit.id);
-  });
+  const url = chrome.runtime.getURL('src/library/page.html') + (host ? `?host=${encodeURIComponent(host)}` : '');
+  chrome.tabs.create({ url }).catch((e) => logError(`Could not open library: ${e}`));
 });
 
 openDlSettingsBtn.addEventListener('click', () => {

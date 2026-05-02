@@ -98,6 +98,59 @@ export async function removeEntry(id: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Apply a partial update to an existing entry. Used by the editable library
+ * page for customTitle / tags / notes edits.
+ *
+ * Returns the updated entry, or null if no entry with this id exists.
+ * Tags are normalized: trimmed, lowercased, deduplicated, empty filtered out.
+ */
+export async function updateEntry(
+  id: string,
+  patch: Partial<Pick<LibraryEntry, 'customTitle' | 'tags' | 'notes'>>,
+): Promise<LibraryEntry | null> {
+  const map = await loadRaw();
+  const existing = map[id];
+  if (!existing) return null;
+
+  const next: LibraryEntry = { ...existing };
+  if ('customTitle' in patch) {
+    const v = patch.customTitle?.trim();
+    if (v) next.customTitle = v;
+    else delete next.customTitle;
+  }
+  if ('notes' in patch) {
+    const v = patch.notes?.trim();
+    if (v) next.notes = v;
+    else delete next.notes;
+  }
+  if ('tags' in patch) {
+    const cleaned = (patch.tags ?? [])
+      .map((t) => t.trim().toLowerCase())
+      .filter((t) => t.length > 0);
+    const unique = [...new Set(cleaned)];
+    if (unique.length) next.tags = unique;
+    else delete next.tags;
+  }
+
+  map[id] = next;
+  await saveRaw(map);
+  return next;
+}
+
+/** Return all distinct tags across the library, sorted by frequency desc. */
+export async function getAllTags(): Promise<{ tag: string; count: number }[]> {
+  const map = await loadRaw();
+  const counts = new Map<string, number>();
+  for (const e of Object.values(map)) {
+    if (!e.tags) continue;
+    for (const tag of e.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+
 /** Wipe the entire library (used for a "reset" action). */
 export async function clearLibrary(): Promise<void> {
   await chrome.storage.local.remove(STORAGE_KEY);

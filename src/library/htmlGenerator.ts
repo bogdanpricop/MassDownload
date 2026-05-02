@@ -39,6 +39,7 @@ export function generateLibraryHtml(host: string, entries: LibraryEntry[]): stri
       localPath: e.localPath,
       host: e.host,
       title: e.title ?? null,
+      customTitle: e.customTitle ?? null,
       description: e.description ?? null,
       query: e.query ?? null,
       source: e.source,
@@ -46,6 +47,8 @@ export function generateLibraryHtml(host: string, entries: LibraryEntry[]): stri
       discoveredAt: e.discoveredAt,
       downloadedAt: e.downloadedAt,
       size: e.size ?? null,
+      tags: e.tags ?? [],
+      notes: e.notes ?? null,
     })),
   );
 
@@ -200,6 +203,31 @@ export function generateLibraryHtml(host: string, entries: LibraryEntry[]): stri
     padding: 0 2px;
     border-radius: 2px;
   }
+  .tags {
+    display: inline-flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+  .tag {
+    background: rgba(68, 147, 248, 0.12);
+    color: var(--primary);
+    border: 1px solid rgba(68, 147, 248, 0.3);
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: lowercase;
+  }
+  .notes {
+    border-left: 2px solid var(--border);
+    padding: 2px 8px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: pre-wrap;
+  }
   footer {
     text-align: center;
     color: var(--muted);
@@ -270,11 +298,14 @@ function applyFilters(q, source) {
     if (source && e.source !== source) return false;
     if (!ql) return true;
     return (
+      (e.customTitle || '').toLowerCase().includes(ql) ||
       (e.title || '').toLowerCase().includes(ql) ||
       (e.description || '').toLowerCase().includes(ql) ||
       (e.url || '').toLowerCase().includes(ql) ||
       (e.query || '').toLowerCase().includes(ql) ||
-      (e.filename || '').toLowerCase().includes(ql)
+      (e.filename || '').toLowerCase().includes(ql) ||
+      (e.notes || '').toLowerCase().includes(ql) ||
+      (e.tags || []).some(t => t.toLowerCase().includes(ql))
     );
   });
 }
@@ -310,7 +341,10 @@ function render() {
     return;
   }
   main.innerHTML = filtered.map(e => {
-    const titleText = e.title || e.filename || e.url;
+    const titleText = e.customTitle || e.title || e.filename || e.url;
+    const tagsHtml = (e.tags && e.tags.length)
+      ? \`<span class="tags">\${e.tags.map(t => \`<span class="tag">\${escapeHtml(t)}</span>\`).join('')}</span>\`
+      : '';
     const meta = [
       \`<span class="badge">\${escapeHtml(e.extension || 'file')}</span>\`,
       e.size ? escapeHtml(fmtSize(e.size)) : '',
@@ -322,10 +356,11 @@ function render() {
     return \`
       <article class="card">
         <h2 class="card-title">
-          <a href="\${escapeHtml(fileUrl(e.localPath))}" target="_blank" rel="noopener" title="\${escapeHtml(e.localPath)}">\${highlight(titleText, q)}</a>
+          <a href="\${escapeHtml(fileUrl(e.localPath))}" target="_blank" rel="noopener" title="\${escapeHtml(e.localPath)}">\${highlight(titleText, q)}</a>\${tagsHtml}
         </h2>
         <div class="card-meta">\${meta}</div>
         \${e.description ? \`<p class="card-desc">\${highlight(e.description, q)}</p>\` : ''}
+        \${e.notes ? \`<div class="notes">\${highlight(e.notes, q)}</div>\` : ''}
       </article>
     \`;
   }).join('');

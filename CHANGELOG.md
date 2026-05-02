@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-02
+
+Editable library + Firefox port (experimental). Three additions: a real
+in-extension library page where files can be tagged / annotated / removed,
+a runtime-detected DOM-parser abstraction so the same source builds for
+both Chromium and Firefox, and copy-ready promotional drafts under
+`docs/posts/`.
+
+### Added
+- **Editable in-extension library page** at `chrome-extension://.../src/library/page.html`.
+  Adds:
+  - `customTitle` overlay on top of the immutable scan title
+  - Tags (lowercase, deduplicated, comma-separated entry)
+  - Notes (free-text, multi-line)
+  - Per-card actions: Show in folder (via `chrome.downloads.show`),
+    Copy source URL, Remove from library
+  - Tag filter pills above the results (toggle multiple to AND-filter)
+  - Host filter dropdown (defaults to the host that was active when
+    the side panel's Library button was clicked)
+  - Per-host portable HTML regeneration button (the `Downloads/MassDownload/{host}/library.html`
+    is rebuilt to reflect the latest tags/notes/customTitles)
+  - Same JSON/CSV export, but now including the new editable fields
+  - Search now matches against `customTitle`, `tags`, and `notes` too
+- **Firefox build (experimental)** — new `npm run build:firefox` outputs
+  `dist-firefox/` with a Firefox-flavored manifest:
+  - `sidebar_action` instead of `side_panel`
+  - `background.scripts` instead of `background.service_worker`
+  - `browser_specific_settings.gecko` block with extension id
+  - drops `sidePanel` + `offscreen` permissions (don't exist on Firefox)
+- **`parseHost.ts`** — runtime-detected DOM parsing abstraction:
+  - On Chromium: routes via offscreen document (DOMParser unavailable in SW)
+  - On Firefox: parses inline using the SW's native DOMParser
+  - Single `callParser(msg)` API consumed by background.ts; no per-call
+    branching in business logic
+- **`docs/posts/`** — copy-ready launch posts for Show HN,
+  r/chrome_extensions, r/opensource, r/programming, and Twitter/X/Mastodon,
+  with reply templates for the predictable questions
+
+### Changed
+- `LibraryEntry` shape gained optional `customTitle`, `tags`, `notes`. Old
+  entries continue to work — these fields default to undefined.
+- The on-disk portable `library.html` now renders custom titles + tags +
+  notes (read-only). Editing happens only in the in-extension page.
+- Sidepanel **Library** button now opens the in-extension editable page
+  in a new tab instead of revealing the on-disk HTML in Explorer. The
+  on-disk HTML is still regenerated automatically and can be opened
+  directly from `Downloads/MassDownload/{host}/library.html`.
+- Manifest version bumped to 0.3.0; the same source compiles for both
+  browser targets via a `MASSDL_TARGET=firefox` env flag at build time.
+
+### Technical notes
+- Library API messages (`LIBRARY_LIST` / `LIBRARY_UPDATE_ENTRY` /
+  `LIBRARY_REMOVE_ENTRY` / `LIBRARY_REGENERATE_DISK_HTML`) use one-shot
+  `chrome.runtime.sendMessage` instead of the long-lived port that
+  sidepanel uses. Port-based comms are appropriate for streaming progress;
+  one-shot is cleaner for CRUD on a single record.
+- Tag normalization (lowercase, trim, dedup, drop empties) is enforced in
+  `library/manifest.ts:updateEntry` so the storage shape stays clean
+  regardless of UI input.
+- Firefox build is marked **experimental** because while it compiles and
+  loads, it hasn't been daily-driven yet. The README has a note flagging
+  the gaps (sidebar_action UX differences, untested SW eviction behavior).
+
 ## [0.2.0] — 2026-05-02
 
 Major feature release. Five additions that make the extension a real
@@ -106,7 +169,8 @@ Initial public release.
 - Offscreen document for `DOMParser` (not available in MV3 service workers)
 - Long-lived port between sidepanel and background for streaming progress
 
-[Unreleased]: https://github.com/bogdanpricop/MassDownload/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/bogdanpricop/MassDownload/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/bogdanpricop/MassDownload/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/bogdanpricop/MassDownload/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/bogdanpricop/MassDownload/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bogdanpricop/MassDownload/releases/tag/v0.1.0

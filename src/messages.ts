@@ -1,4 +1,4 @@
-import type { DownloadItem, LinkInfo, ScanErrorReason, SearchQuery, SearchSource } from './types';
+import type { DownloadItem, LibraryEntry, LinkInfo, ScanErrorReason, SearchQuery, SearchSource } from './types';
 
 // From sidepanel → background
 export type SidepanelMsg =
@@ -50,6 +50,23 @@ export type BackgroundMsg =
   /** Emitted on side panel reconnect when there's a previously-interrupted queue
    *  to offer the user a "Resume?" prompt. */
   | { type: 'QUEUE_RESUMABLE'; pendingCount: number; totalCount: number; startedAt: number };
+
+// Library page (in-extension, editable) ↔ background, request/response.
+export type LibraryRequest =
+  | { type: 'LIBRARY_LIST'; host?: string }
+  | {
+      type: 'LIBRARY_UPDATE_ENTRY';
+      id: string;
+      patch: Partial<Pick<LibraryEntry, 'customTitle' | 'tags' | 'notes'>>;
+    }
+  | { type: 'LIBRARY_REMOVE_ENTRY'; id: string }
+  | { type: 'LIBRARY_REGENERATE_DISK_HTML'; host: string };
+
+export type LibraryResponse =
+  | { ok: true; entries: LibraryEntry[] }
+  | { ok: true; entry: LibraryEntry | null }
+  | { ok: true }
+  | { ok: false; error: string };
 
 // Offscreen document parses HTML/XML — request/response over chrome.runtime.sendMessage.
 // Google scanning runs entirely in a real tab via `chrome.scripting.executeScript`,

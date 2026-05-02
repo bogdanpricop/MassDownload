@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MassDownload Library</title>
+  <link rel="stylesheet" href="./page.css" />
+</head>
+<body>
+  <header>
+    <h1 id="title">MassDownload Library</h1>
+    <div class="stats" id="stats"></div>
+    <div class="controls">
+      <input type="search" id="q" placeholder="Search title, description, tags, notes, query, URL…" autofocus />
+      <select id="host"><option value="">All hosts</option></select>
+      <select id="sort">
+        <option value="dl-desc">Newest first</option>
+        <option value="dl-asc">Oldest first</option>
+        <option value="title-asc">Title A→Z</option>
+        <option value="title-desc">Title Z→A</option>
+        <option value="size-desc">Largest first</option>
+        <option value="size-asc">Smallest first</option>
+      </select>
+      <select id="source"><option value="">All sources</option></select>
+      <button class="export" id="export-json" title="Download filtered list as JSON">↓ JSON</button>
+      <button class="export" id="export-csv" title="Download filtered list as CSV">↓ CSV</button>
+      <button class="export" id="export-html" title="Regenerate the portable on-disk HTML for this host">↻ Portable HTML</button>
+    </div>
+    <div class="tag-filter" id="tag-filter"></div>
+  </header>
+  <main id="entries"></main>
+  <footer>
+    <span>Editable library — changes save automatically to <code>chrome.storage.local</code>.</span>
+    <span id="save-indicator"></span>
+  </footer>
+  <script type="module" src="./page.ts"></script>
+</body>
+</html>

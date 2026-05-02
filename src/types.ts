@@ -89,6 +89,7 @@ export interface LibraryEntry {
   localPath: string;
   /** Hostname like "bej-cojocaru.ro" (no www., lowercase). */
   host: string;
+  /** Title from search snippet at scan time (immutable record). */
   title?: string;
   description?: string;
   /** Free-text query that found this file (e.g. "site:bej-cojocaru.ro filetype:pdf"). */
@@ -103,4 +104,11 @@ export interface LibraryEntry {
   downloadId?: number;
   /** File size in bytes if known (from chrome.downloads). */
   size?: number;
+  // ---- User-editable overlay (set via the in-extension library page) ----
+  /** User-provided title; when set, displayed instead of `title` in views. */
+  customTitle?: string;
+  /** Tags assigned by the user (lowercase, deduplicated). */
+  tags?: string[];
+  /** Free-text notes the user has attached to this entry. */
+  notes?: string;
 }

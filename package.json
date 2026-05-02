@@ -1,18 +1,20 @@
 {
   "name": "massdownload",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Chrome extension that mass-downloads files (PDFs etc.) from Google search results across all pages, or any page with links.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:firefox": "tsc --noEmit && cross-env MASSDL_TARGET=firefox vite build --outDir dist-firefox",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.27",
     "@types/chrome": "^0.0.270",
+    "cross-env": "^7.0.3",
     "typescript": "^5.5.4",
     "vite": "^5.4.6"
   }

@@ -4,7 +4,13 @@ import { buildBingQueryUrl, buildGoogleQueryUrl, buildSiteOrigin } from './parse
 import { extractSitemapsFromRobots } from './parsers/sitemap';
 import { canonicalizeUrl, filterAndDedup } from './parsers/filters';
 import { startQueue, type DownloaderHandle } from './downloader';
-import { addEntries, getEntries, knownCanonicalUrls } from './library/manifest';
+import {
+  addEntries,
+  getEntries,
+  knownCanonicalUrls,
+  removeEntry,
+  updateEntry,
+} from './library/manifest';
 import { generateLibraryHtml } from './library/htmlGenerator';
 import {
   clearQueueState,
@@ -15,15 +21,15 @@ import {
 } from './queueState';
 import { findScheduledSearch, reconcileAlarms, recordScheduledRun } from './scheduler';
 import { loadSettings } from './storage';
+import { callParser } from './parseHost';
 import type {
   BackgroundMsg,
-  OffscreenMsg,
-  OffscreenResponse,
+  LibraryRequest,
+  LibraryResponse,
   SidepanelMsg,
 } from './messages';
 import type { LinkInfo, ScanErrorReason, SearchQuery, SearchSource } from './types';
 
-const OFFSCREEN_PATH = 'src/offscreen.html';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
@@ -38,43 +44,9 @@ chrome.runtime.onStartup.addListener(() => {
   void reconcileAlarms();
 });
 
-// ---------------------------------------------------------------------------
-// Offscreen document — DOMParser host
-// ---------------------------------------------------------------------------
-
-let offscreenCreating: Promise<void> | null = null;
-
-async function ensureOffscreenDocument(): Promise<void> {
-  const exists = await chrome.offscreen.hasDocument().catch(() => false);
-  if (exists) return;
-  if (offscreenCreating) {
-    await offscreenCreating;
-    return;
-  }
-  offscreenCreating = chrome.offscreen
-    .createDocument({
-      url: OFFSCREEN_PATH,
-      reasons: [chrome.offscreen.Reason.DOM_PARSER],
-      justification: 'Parse Google/Bing HTML and sitemap XML with DOMParser.',
-    })
-    .finally(() => {
-      offscreenCreating = null;
-    });
-  await offscreenCreating;
-}
-
-async function callOffscreen(msg: OffscreenMsg): Promise<OffscreenResponse> {
-  await ensureOffscreenDocument();
-  return new Promise<OffscreenResponse>((resolve) => {
-    chrome.runtime.sendMessage(msg, (response: OffscreenResponse | undefined) => {
-      if (chrome.runtime.lastError) {
-        resolve({ ok: false, error: chrome.runtime.lastError.message ?? 'sendMessage failed' });
-        return;
-      }
-      resolve(response ?? { ok: false, error: 'no response from offscreen' });
-    });
-  });
-}
+// DOM/XML parsing is delegated to a host-aware abstraction in src/parseHost.ts:
+// Chromium uses an offscreen document; Firefox parses inline in the SW/event-page.
+// (See callParser usages below.)
 
 // ---------------------------------------------------------------------------
 // Per-port session state
@@ -552,7 +524,7 @@ async function scanBingSerp(
     }
 
     const html = await res.text();
-    const parsed = await callOffscreen({ type: 'PARSE_BING_HTML', html });
+    const parsed = await callParser({ type: 'PARSE_BING_HTML', html });
     if (!parsed.ok) {
       return { items, captcha: false, failed: true, errorDetail: parsed.error };
     }
@@ -676,7 +648,7 @@ async function scanCrawl(
       signal.removeEventListener('abort', onParentAbort);
     }
 
-    const parsed = await callOffscreen({ type: 'PARSE_PAGE_ANCHORS', html, baseUrl: next.url });
+    const parsed = await callParser({ type: 'PARSE_PAGE_ANCHORS', html, baseUrl: next.url });
     if (!parsed.ok || parsed.kind !== 'page-anchors') {
       lastError = `${next.url}: ${parsed.ok ? 'wrong kind' : parsed.error}`;
       continue;
@@ -775,7 +747,7 @@ async function scanSitemapTree(
       continue;
     }
 
-    const parsed = await callOffscreen({ type: 'PARSE_SITEMAP_XML', xml });
+    const parsed = await callParser({ type: 'PARSE_SITEMAP_XML', xml });
     if (!parsed.ok) {
       lastError = `${next.url}: ${parsed.error}`;
       continue;
@@ -1422,4 +1394,73 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
   if (!('settings' in changes)) return;
   void reconcileAlarms();
+});
+
+// ---------------------------------------------------------------------------
+// In-extension library page API (one-shot sendMessage requests)
+// ---------------------------------------------------------------------------
+
+chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
+  // Only handle messages from this extension's own pages.
+  if (sender.id !== chrome.runtime.id) return;
+  // Library API messages have a `type` starting with LIBRARY_
+  const m = msg as LibraryRequest & { type?: string };
+  if (!m || typeof m !== 'object' || !m.type || !m.type.startsWith('LIBRARY_')) return;
+
+  void (async () => {
+    try {
+      let response: LibraryResponse;
+      switch (m.type) {
+        case 'LIBRARY_LIST': {
+          const list = await getEntries(m.host);
+          response = { ok: true, entries: list };
+          break;
+        }
+        case 'LIBRARY_UPDATE_ENTRY': {
+          const entry = await updateEntry(m.id, m.patch);
+          // Regenerate the on-disk HTML for this entry's host so it reflects edits.
+          if (entry) {
+            try {
+              await saveLibraryHtmlForHost(entry.host);
+            } catch (e) {
+              console.warn('[MassDownload] regen after update failed:', e);
+            }
+          }
+          response = { ok: true, entry };
+          break;
+        }
+        case 'LIBRARY_REMOVE_ENTRY': {
+          // Look up the host before removing so we can regen its HTML.
+          const map = await getEntries();
+          const target = map.find((e) => e.id === m.id);
+          const removed = await removeEntry(m.id);
+          if (removed && target) {
+            try {
+              await saveLibraryHtmlForHost(target.host);
+            } catch (e) {
+              console.warn('[MassDownload] regen after remove failed:', e);
+            }
+          }
+          response = { ok: true };
+          break;
+        }
+        case 'LIBRARY_REGENERATE_DISK_HTML': {
+          await saveLibraryHtmlForHost(m.host);
+          response = { ok: true };
+          break;
+        }
+        default:
+          response = { ok: false, error: 'unknown library request' };
+      }
+      sendResponse(response);
+    } catch (e) {
+      const errResp: LibraryResponse = {
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      };
+      sendResponse(errResp);
+    }
+  })();
+
+  return true; // keep the channel open for async sendResponse
 });
