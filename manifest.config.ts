@@ -8,7 +8,7 @@ const isFirefox = env.MASSDL_TARGET === 'firefox';
 const baseManifest = {
   manifest_version: 3 as const,
   name: 'MassDownload',
-  version: '0.3.0',
+  version: '0.3.1',
   description:
     'Mass-download files (PDF, etc.) from Google search results across all pages, or from any page with links.',
   host_permissions: ['<all_urls>'],

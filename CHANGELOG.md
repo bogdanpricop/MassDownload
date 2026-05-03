@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-05-03
+
+Small UX patch focused on the **Site** input in the Quick Search form.
+No new features or breaking changes; safe drop-in for any v0.3.x install.
+
+### Changed
+- **Site input auto-cleans pasted URLs.** If you paste
+  `https://www.example.com/foo/bar?x=1#h` (or anything similar), the field
+  rewrites itself to `example.com` immediately. Stripping happens on
+  paste, on blur, and again at query-build time as defense-in-depth, so
+  even a fast Search click before blur fires produces a clean query.
+- **Site placeholder generalized** from a specific domain to `example.com`.
+- **Filetype(s) label** now reads `Filetype(s) — comma-separated`, putting
+  the format hint next to the label instead of only in the placeholder.
+
+### Why
+Half the time when scoping a scan to a domain, you copy the URL from
+the address bar — which includes `https://`, `www.`, and a path. Forcing
+the user to manually delete those parts was friction; doing it
+automatically is the right default.
+
 ## [0.3.0] — 2026-05-02
 
 Editable library + Firefox port (experimental). Three additions: a real
@@ -169,7 +190,8 @@ Initial public release.
 - Offscreen document for `DOMParser` (not available in MV3 service workers)
 - Long-lived port between sidepanel and background for streaming progress
 
-[Unreleased]: https://github.com/bogdanpricop/MassDownload/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/bogdanpricop/MassDownload/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/bogdanpricop/MassDownload/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/bogdanpricop/MassDownload/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/bogdanpricop/MassDownload/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/bogdanpricop/MassDownload/compare/v0.1.0...v0.1.1

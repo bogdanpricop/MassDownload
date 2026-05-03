@@ -129,13 +129,39 @@ function setBusy(kind: 'scan' | 'download' | null) {
   stopBtn.disabled = kind === null;
 }
 
+/**
+ * Strip protocol, www., trailing path/query/hash, and surrounding whitespace
+ * from anything pasted into the Site field. Accepts pastes like:
+ *   "https://www.example.com/foo/bar?x=1#h" → "example.com"
+ *   "  http://EXAMPLE.com  "                → "example.com"
+ *   "example.com"                            → "example.com" (unchanged)
+ */
+function normalizeSiteInput(raw: string): string {
+  let s = raw.trim();
+  if (!s) return '';
+  // Try URL parsing first (handles full URLs cleanly)
+  try {
+    const u = new URL(/^[a-z]+:\/\//i.test(s) ? s : `https://${s}`);
+    let host = u.hostname.toLowerCase().replace(/^www\./, '');
+    return host;
+  } catch {
+    // Fall back to regex stripping for malformed inputs
+    s = s.replace(/^[a-z]+:\/\//i, '');
+    s = s.replace(/^www\./i, '');
+    s = s.replace(/[\/?#].*$/, '');
+    return s.toLowerCase();
+  }
+}
+
 function readQuery(): SearchQuery {
   const filetypes = qsFiletypes.value
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  const rawSite = qsSite.value.trim();
+  const site = rawSite ? normalizeSiteInput(rawSite) : undefined;
   return {
-    site: qsSite.value.trim() || undefined,
+    site,
     filetypes: filetypes.length ? filetypes : undefined,
     keywords: qsKeywords.value.trim() || undefined,
     exclude: qsExclude.value.trim() || undefined,
@@ -524,6 +550,22 @@ async function init() {
 
   connect();
 }
+
+// Auto-strip protocol/www/path on paste into the Site field. Letting the paste
+// land first and rewriting the value next tick gives us the final post-paste
+// content (handles partial paste / smart-paste extensions correctly).
+qsSite.addEventListener('paste', () => {
+  setTimeout(() => {
+    const cleaned = normalizeSiteInput(qsSite.value);
+    if (cleaned !== qsSite.value) qsSite.value = cleaned;
+  }, 0);
+});
+// Also clean up on blur for the case where the user typed a URL by hand.
+qsSite.addEventListener('blur', () => {
+  if (!qsSite.value) return;
+  const cleaned = normalizeSiteInput(qsSite.value);
+  if (cleaned !== qsSite.value) qsSite.value = cleaned;
+});
 
 qsSearchBtn.addEventListener('click', () => {
   const q = readQuery();
